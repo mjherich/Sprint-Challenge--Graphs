@@ -87,13 +87,14 @@ def find_next_path(room_id, visited, g=graph):
         last_room_id = rooms[-1]
         neighbors = g.get_neighbors(last_room_id)  # returns {'n': 2, 's': 0}
         neighbors_keys = list(neighbors.keys())
+        random.shuffle(neighbors_keys)
         if len(neighbors_keys) == 1 and neighbors[neighbors_keys[0]] not in visited:
             # We are at the CLOSEST, UNEXPLORED DEAD END as soon as this condition is True
             shortest_path_to_unexplored_dead_end = list(moves) + [neighbors_keys[0]]
             return shortest_path_to_unexplored_dead_end
         else:
             # Keep going through the graph until we hit a dead end
-            for direction in neighbors:
+            for direction in neighbors_keys:
                 next_room = neighbors[direction]
                 new_rooms = list(rooms) + [next_room]
                 new_moves = list(moves) + [direction]
@@ -103,23 +104,43 @@ def find_next_path(room_id, visited, g=graph):
                 if next_room not in visited:
                     return new_moves
 
-
-traversal_path = []
-visited = set()
-visited.add(starting_room.id)
-current_room_id = starting_room.id
-num_rooms = len(graph.vertices)
-while len(visited) < num_rooms:
-    # Find the nearest dead end
-    moves = find_next_path(current_room_id, visited)
-    # Traverse the returned list of moves
-    for direction in moves:
-        player.travel(direction)
-        traversal_path.append(direction)
-        visited.add(player.current_room.id)
-    current_room_id = player.current_room.id
-
-
+# Read from saved traversals
+shortest_traversal_moves = []
+f = open("shortest_traversal_path.txt", 'r+')
+past_runs = f.readlines()
+for line in past_runs:
+    shortest_traversal_moves = line.split(",")
+shortest_traversal = len(shortest_traversal_moves)
+last_saved_move = shortest_traversal_moves[-1]
+shortest_traversal_moves[-1] = last_saved_move[0]
+# Start
+iteration = 0
+target_moves = 958  # Change this target to search for a more efficient path
+while shortest_traversal > target_moves:
+    iteration += 1
+    player = Player(world.starting_room)
+    traversal_path = []
+    visited = set()
+    visited.add(starting_room.id)
+    current_room_id = starting_room.id
+    num_rooms = len(graph.vertices)
+    while len(visited) < num_rooms:
+        # Find the nearest dead end
+        moves = find_next_path(current_room_id, visited)
+        # Traverse the returned list of moves
+        for direction in moves:
+            player.travel(direction)
+            traversal_path.append(direction)
+            visited.add(player.current_room.id)
+        current_room_id = player.current_room.id
+    traversal_length = len(traversal_path)
+    if traversal_length < shortest_traversal:
+        shortest_traversal = traversal_length
+        shortest_traversal_moves = traversal_path
+        print(f"New shortest traversal of {shortest_traversal} moves on iteration {iteration}")
+        f.write(f"{','.join(shortest_traversal_moves)}\n")
+f.close()
+traversal_path = shortest_traversal_moves
 
 
 # TRAVERSAL TEST
