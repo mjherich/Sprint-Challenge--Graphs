@@ -115,7 +115,7 @@ last_saved_move = shortest_traversal_moves[-1]
 shortest_traversal_moves[-1] = last_saved_move[0]
 # Start
 iteration = 0
-target_moves = 958  # Change this target to search for a more efficient path
+target_moves = 957  # Change this target to search for a more efficient path
 while shortest_traversal > target_moves:
     iteration += 1
     player = Player(world.starting_room)
