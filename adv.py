@@ -3,6 +3,8 @@ from player import Player
 from world import World
 from util import Queue, Stack, Graph
 
+import pdb
+import time
 import random
 from ast import literal_eval
 
@@ -48,9 +50,8 @@ starting_room = world.starting_room
 # graph.add_vertex(starting_room.id)
 stack = Stack()
 stack.push(starting_room)
-# Continue until we have seen all rooms and the stack is empty
-counter = 0
 visited = set()
+# Continue until we have seen all rooms and the stack is empty
 while stack.size() > 0:
     room = stack.pop() # returns a <Room> class instance, not a room id
     room_id = room.id
@@ -65,16 +66,95 @@ while stack.size() > 0:
             graph.add_vertex(connected_room_id)
         graph.add_edge(room_id, connected_room_id, direction)
         # After making the connection in the graph add it to the stack
-        print(f"Pushing to the stack... {counter}")
-        counter += 1
         if connected_room_id not in visited:
             stack.push(connected_room)
     visited.add(room_id)
 
-print(f"Graph neighbors of room 2: {graph.get_neighbors(2)}")
+# print(graph.get_neighbors(1))
+
+def path_to_nearest_unexplored_dead_end(room_id, visited, g=graph):
+    """
+    Takes in a room id and a set of visited room ids
+
+    returns a set of moves that the player can take to get to the nearest unvisited dead end.
+
+    if there are no dead ends it returns -1
+    """
+    rooms_with_moves = {} # [ ["LIST OF ROOM IDS"], ["LIST OF MOVES"] ]
+    rooms_with_moves[room_id] = [[room_id], []]
+    q = Queue()
+    q.enqueue([[room_id], []])
+    while q.size() > 0:
+        rooms, moves = q.dequeue()
+        last_room_id = rooms[-1]
+        neighbors = g.get_neighbors(last_room_id)  # returns {'n': 2, 's': 0}
+        neighbors_keys = list(neighbors.keys())
+        if len(neighbors_keys) == 1 and neighbors[neighbors_keys[0]] not in visited:
+            # We are at the CLOSEST, UNEXPLORED DEAD END as soon as this condition is True
+            shortest_path_to_unexplored_dead_end = list(moves) + [neighbors_keys[0]]
+            return shortest_path_to_unexplored_dead_end
+        else:
+            # Keep going through the graph until we hit a dead end
+            for direction in neighbors:
+                next_room = neighbors[direction]
+                new_rooms = list(rooms) + [next_room]
+                new_moves = list(moves) + [direction]
+                if next_room not in rooms_with_moves:
+                    q.enqueue([new_rooms, new_moves])
+                    rooms_with_moves[next_room] = [new_rooms, new_moves]
+    # pdb.set_trace()
+    # No more dead ends so return the longest path
+    return -1
+    max_path_length = 0
+    max_path = ""
+    for el in rooms_with_moves:
+        rooms, moves = rooms_with_moves[el]
+        if len(rooms) > max_path_length:
+            max_path_length = len(rooms)
+            max_path = moves
+    return max_path
+
+# pdb.set_trace()
 # NEXT: Use the graph to find the most efficient route that visits all rooms at least once
 # traversal_path = ['n', 'n']
 traversal_path = []
+visited = set()
+visited.add(starting_room.id)
+current_room_id = starting_room.id
+num_rooms = len(graph.vertices)
+iteration = 0
+no_more_dead_ends = False
+while len(visited) < num_rooms:
+    # Find the nearest dead end
+    iteration += 1
+    print(iteration)
+    if no_more_dead_ends:
+        # pdb.set_trace()
+        # Traverse the rest of the map NEED TO FINISH THIS
+        neighbors = graph.get_neighbors(current_room_id)
+        print(neighbors)
+        for direction in neighbors:
+            print(f"in visited? {neighbors[direction] in visited}")
+            if neighbors[direction] not in visited:
+                player.travel(direction)
+                traversal_path.append(direction)
+                visited.add(player.current_room.id)
+                print("moving")
+            else:
+                print("not moving")
+                pass
+        time.sleep(1)
+    else:
+        moves = path_to_nearest_unexplored_dead_end(current_room_id, visited)
+        if moves == -1:
+            no_more_dead_ends = True
+        else:
+            # Traverse the returned list of moves
+            for direction in moves:
+                player.travel(direction)
+                traversal_path.append(direction)
+                visited.add(player.current_room.id)
+            current_room_id = player.current_room.id
 
 
 
