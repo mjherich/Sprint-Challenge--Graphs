@@ -145,6 +145,10 @@ def brute_force(shared):
         # Get most up to date shared_shortest_path_len
         shared_shortest_path_len = shared.value()
 
+# Check if logging directory exists; if False and create it
+logging_dir_exists = os.path.isdir(f'{os.getcwd()}/logging')
+if not logging_dir_exists:
+    os.mkdir(f"{os.getcwd()}/logging")
 # Create session logging file
 log_file_name = f"./logging/session-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.txt"
 with open(log_file_name, "w+") as f:
