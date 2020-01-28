@@ -108,21 +108,22 @@ def find_next_path(room_id, visited, g=graph):
                     return new_moves
 
 # Load persisted pathes
-f = open("shortest_traversal_path.txt", 'r+')
-past_runs = f.readlines()
-shortest_traversal_moves = past_runs[-1].split(",")
-shortest_traversal = len(shortest_traversal_moves)
-f.close()
-print(f"{Current best path: len(shortest_traversal_moves} moves"))
+with open("shortest_traversal_path.txt", 'r') as f:
+    shortest_traversal_str = f.read()
+    if shortest_traversal_str != "":
+        shortest_traversal_moves = shortest_traversal_str.split(",")
+        shortest_traversal = len(shortest_traversal_moves)
+    else:
+        shortest_traversal = len(graph.vertices) * 50
+print(f"Current best path: {shortest_traversal} moves")
 target = int(input("Enter a target traversal length... "))
 # Start
 def brute_force(shared):
-    # Read from shared shortest path
-    shared_shortest_path_len = len(shortest_traversal)
+    # Initialize with persistence length
+    shared_shortest_path_len = shortest_traversal
+    # Begin brute force search loop
     while shared_shortest_path_len > target:
-        shared_shortest_path_str = shared.value()
-        shared_shortest_path_moves = shared_shortest_path_str.split(",")
-        shared_shortest_path_len = len(shared_shortest_path_moves)
+        # Reset path search variables
         player = Player(world.starting_room)
         traversal_path = []
         visited = set()
@@ -140,61 +141,68 @@ def brute_force(shared):
         traversal_length = len(traversal_path)
 
         if traversal_length < shared_shortest_path_len:
-            new_shortest_traversal = traversal_length
-            status = shared.new_shortest_path(traversal_path)
-            if status == "UPDATED":
-                f.write(f"{','.join(shortest_traversal_moves)}\n")
+            shared.set_length(traversal_path)
+        # Get most up to date shared_shortest_path_len
+        shared_shortest_path_len = shared.value()
 
 # Create session logging file
-log_file_name = f"session-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.txt"
+log_file_name = f"./logging/session-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.txt"
 with open(log_file_name, "w+") as f:
-    f.write(f"Running brute force search on {mp.cpu_count()} cores...\n")
+    f.write(f"Running brute force search on {mp.cpu_count()} cores with a target of {target}...\n")
 print(f"Running brute force search on {mp.cpu_count()} cores...\n")
 
 # === Multiprocessing ===
-class Shortest_Path(object):
-    def __init__(self, initval=""):
-        self.val = mp.Value('u', initval)
+class Shortest_Path_Len(object):
+    def __init__(self, initval=shortest_traversal):
+        self.val = mp.Value('i', initval)
         self.lock = mp.Lock()
 
-    def new_shortest_path(self, new_path):
+    def set_length(self, new_path):
         """
-        Attempts to update the shortest path.
+        Attempts to update the shared shortest path length.
 
-        Succeeds if input is shorter than the current value, returns the input.
-        If input is not shorter than the current value return the current value as a list.
+        Input: new_path as list of moves
+
+        Calculate the length from input and update the persistence file if it's less than the current val.
         """
         with self.lock:
             new_length = len(new_path)
-            current_length = len(self.val.value.split(","))
             # Check if new path is still shorter than what is set
-            if new_length < current_length:
+            if new_length < self.val.value:
                 new_path_str = ",".join(new_path)
-                self.val.value = new_path_str
+                # Updates the shared length val
+                self.val.value = new_length
                 message = f"New shortest path of {new_length} moves found on process {os.getpid()}"
+                # Print message to console
                 print(message)
-                with open(log_file_name, "w") as f:
+                # Write message to log file
+                with open(log_file_name, "a") as f:
                     f.write(f"{message}\n")
+                # Write to persistence
+                with open("shortest_traversal_path.txt", 'w') as f:
+                    f.write(f"{new_path_str}")
 
     def value(self):
         with self.lock:
-            return self.val.value.split(",")
+            return self.val.value
 
 # Initialize shared shortest_path string to make sure we're always working on a better path
-print("past runs: ", past_runs[-1])
-shared_shortest_path = Shortest_Path(past_runs[-1])
+shared_shortest_path_len = Shortest_Path_Len()
 # Create processes
-processes = [mp.Process(target=brute_force, args=(shared_shortest_path)) for _ in range(mp.cpu_count())]
+processes = [mp.Process(target=brute_force, args=(shared_shortest_path_len,)) for _ in range(mp.cpu_count())]
 
 for p in processes:
     p.start()
 
 for p in processes:
-    p.join()
+    p.join(None)
 
-# Get traversal from multiprocessing value
-traversal_path = shared_shortest_path.value()
-
+# Get traversal from persistence
+with open("shortest_traversal_path.txt", 'r') as f:
+    shortest_traversal_str = f.read()
+    shortest_traversal_moves = shortest_traversal_str.split(",")
+    shortest_traversal = len(shortest_traversal_moves)
+traversal_path = shortest_traversal_moves
 
 # TRAVERSAL TEST
 visited_rooms = set()
