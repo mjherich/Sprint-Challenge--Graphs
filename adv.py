@@ -3,7 +3,10 @@ from player import Player
 from world import World
 from util import Queue, Stack, Graph
 
+import multiprocessing as mp
+import os
 import pdb
+from datetime import datetime
 import time
 import random
 from ast import literal_eval
@@ -104,43 +107,93 @@ def find_next_path(room_id, visited, g=graph):
                 if next_room not in visited:
                     return new_moves
 
-# Read from saved traversals
-shortest_traversal_moves = []
+# Load persisted pathes
 f = open("shortest_traversal_path.txt", 'r+')
 past_runs = f.readlines()
-for line in past_runs:
-    shortest_traversal_moves = line.split(",")
+shortest_traversal_moves = past_runs[-1].split(",")
 shortest_traversal = len(shortest_traversal_moves)
-last_saved_move = shortest_traversal_moves[-1]
-shortest_traversal_moves[-1] = last_saved_move[0]
-# Start
-iteration = 0
-target_moves = 949  # Change this target to search for a more efficient path
-while shortest_traversal > target_moves:
-    iteration += 1
-    player = Player(world.starting_room)
-    traversal_path = []
-    visited = set()
-    visited.add(starting_room.id)
-    current_room_id = starting_room.id
-    num_rooms = len(graph.vertices)
-    while len(visited) < num_rooms:
-        # Find the nearest dead end
-        moves = find_next_path(current_room_id, visited)
-        # Traverse the returned list of moves
-        for direction in moves:
-            player.travel(direction)
-            traversal_path.append(direction)
-            visited.add(player.current_room.id)
-        current_room_id = player.current_room.id
-    traversal_length = len(traversal_path)
-    if traversal_length < shortest_traversal:
-        shortest_traversal = traversal_length
-        shortest_traversal_moves = traversal_path
-        print(f"New shortest traversal of {shortest_traversal} moves on iteration {iteration}")
-        f.write(f"{','.join(shortest_traversal_moves)}\n")
 f.close()
-traversal_path = shortest_traversal_moves
+print(f"{Current best path: len(shortest_traversal_moves} moves"))
+target = int(input("Enter a target traversal length... "))
+# Start
+def brute_force(shared):
+    # Read from shared shortest path
+    shared_shortest_path_len = len(shortest_traversal)
+    while shared_shortest_path_len > target:
+        shared_shortest_path_str = shared.value()
+        shared_shortest_path_moves = shared_shortest_path_str.split(",")
+        shared_shortest_path_len = len(shared_shortest_path_moves)
+        player = Player(world.starting_room)
+        traversal_path = []
+        visited = set()
+        visited.add(starting_room.id)
+        current_room_id = starting_room.id
+        while len(visited) < len(graph.vertices):
+            # Find the nearest dead end
+            moves = find_next_path(current_room_id, visited)
+            # Traverse the returned list of moves
+            for direction in moves:
+                player.travel(direction)
+                traversal_path.append(direction)
+                visited.add(player.current_room.id)
+            current_room_id = player.current_room.id
+        traversal_length = len(traversal_path)
+
+        if traversal_length < shared_shortest_path_len:
+            new_shortest_traversal = traversal_length
+            status = shared.new_shortest_path(traversal_path)
+            if status == "UPDATED":
+                f.write(f"{','.join(shortest_traversal_moves)}\n")
+
+# Create session logging file
+log_file_name = f"session-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.txt"
+with open(log_file_name, "w+") as f:
+    f.write(f"Running brute force search on {mp.cpu_count()} cores...\n")
+print(f"Running brute force search on {mp.cpu_count()} cores...\n")
+
+# === Multiprocessing ===
+class Shortest_Path(object):
+    def __init__(self, initval=""):
+        self.val = mp.Value('u', initval)
+        self.lock = mp.Lock()
+
+    def new_shortest_path(self, new_path):
+        """
+        Attempts to update the shortest path.
+
+        Succeeds if input is shorter than the current value, returns the input.
+        If input is not shorter than the current value return the current value as a list.
+        """
+        with self.lock:
+            new_length = len(new_path)
+            current_length = len(self.val.value.split(","))
+            # Check if new path is still shorter than what is set
+            if new_length < current_length:
+                new_path_str = ",".join(new_path)
+                self.val.value = new_path_str
+                message = f"New shortest path of {new_length} moves found on process {os.getpid()}"
+                print(message)
+                with open(log_file_name, "w") as f:
+                    f.write(f"{message}\n")
+
+    def value(self):
+        with self.lock:
+            return self.val.value.split(",")
+
+# Initialize shared shortest_path string to make sure we're always working on a better path
+print("past runs: ", past_runs[-1])
+shared_shortest_path = Shortest_Path(past_runs[-1])
+# Create processes
+processes = [mp.Process(target=brute_force, args=(shared_shortest_path)) for _ in range(mp.cpu_count())]
+
+for p in processes:
+    p.start()
+
+for p in processes:
+    p.join()
+
+# Get traversal from multiprocessing value
+traversal_path = shared_shortest_path.value()
 
 
 # TRAVERSAL TEST
